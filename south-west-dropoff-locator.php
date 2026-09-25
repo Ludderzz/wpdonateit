@@ -32,54 +32,6 @@ add_action('manage_sw_location_posts_custom_column', function($column, $post_id)
     }
 }, 10, 2);
 
-// 3. ADMIN META BOX WITH LIVE GEOCODING BUTTON
-add_action('add_meta_boxes', function() {
-    add_meta_box('sw_details', 'Location Details & Daily Hours', 'sw_render_metabox', 'sw_location', 'normal', 'high');
-});
-
-function sw_render_metabox($post) {
-    $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    $addr = get_post_meta($post->ID, '_sw_addr', true);
-    $cat  = get_post_meta($post->ID, '_sw_cat', true);
-    $lat  = get_post_meta($post->ID, '_sw_lat', true);
-    $lng  = get_post_meta($post->ID, '_sw_lng', true);
-    ?>
-    <p>
-        <label><strong>Address</strong></label><br>
-        <div style="display: flex; gap: 10px; margin-top: 5px;">
-            <input type="text" id="sw_addr_field" name="sw_addr" value="<?php echo esc_attr($addr); ?>" style="flex: 1;">
-            <button type="button" id="sw_geocode_btn" class="button button-secondary">📍 Get Coordinates</button>
-        </div>
-        <small style="color: #666;">Enter full address including town/postcode, then click "Get Coordinates".</small>
-    </p>
-    
-    <p>
-        <label><strong>Category</strong></label><br>
-        <input type="text" name="sw_cat" value="<?php echo esc_attr($cat); ?>" style="width:100%;">
-    </p>
-    
-    <div style="display: flex; gap: 15px; background: #f0f0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <div style="flex: 1;">
-            <label><strong>Latitude</strong></label>
-            <input type="text" id="sw_lat_field" name="sw_lat" value="<?php echo esc_attr($lat); ?>" style="width:100%;">
-        </div>
-        <div style="flex: 1;">
-            <label><strong>Longitude</strong></label>
-            <input type="text" id="sw_lng_field" name="sw_lng" value="<?php echo esc_attr($lng); ?>" style="width:100%;">
-        </div>
-    </div>
-
-    <h4>Opening Hours</h4>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <?php foreach($days as $day): 
-            $val = get_post_meta($post->ID, '_sw_h_' . $day, true); ?>
-            <p>
-                <label style="text-transform: capitalize;"><strong><?php echo $day; ?></strong></label><br>
-                <input type="text" name="sw_h_<?php echo $day; ?>" value="<?php echo esc_attr($val); ?>" style="width:100%;">
-            </p>
-        <?php endforeach; ?>
-    </div>
-
 // 3. ADMIN META BOX (MOVED TO MAIN CONTENT AREA)
 add_action('add_meta_boxes', function() {
     add_meta_box(
