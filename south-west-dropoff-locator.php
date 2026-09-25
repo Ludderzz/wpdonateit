@@ -32,7 +32,7 @@ add_action('manage_sw_location_posts_custom_column', function($column, $post_id)
     }
 }, 10, 2);
 
-// 3. ADMIN META BOX
+// 3. ADMIN META BOX WITH LIVE GEOCODING BUTTON
 add_action('add_meta_boxes', function() {
     add_meta_box('sw_details', 'Location Details & Daily Hours', 'sw_render_metabox', 'sw_location', 'normal', 'high');
 });
@@ -44,25 +44,138 @@ function sw_render_metabox($post) {
     $lat  = get_post_meta($post->ID, '_sw_lat', true);
     $lng  = get_post_meta($post->ID, '_sw_lng', true);
     ?>
-    <p><label><strong>Address</strong></label><br>
-    <input type="text" name="sw_addr" value="<?php echo esc_attr($addr); ?>" style="width:100%;"></p>
+    <p>
+        <label><strong>Address</strong></label><br>
+        <div style="display: flex; gap: 10px; margin-top: 5px;">
+            <input type="text" id="sw_addr_field" name="sw_addr" value="<?php echo esc_attr($addr); ?>" style="flex: 1;">
+            <button type="button" id="sw_geocode_btn" class="button button-secondary">📍 Get Coordinates</button>
+        </div>
+        <small style="color: #666;">Enter full address including town/postcode, then click "Get Coordinates".</small>
+    </p>
     
-    <p><label><strong>Category</strong></label><br>
-    <input type="text" name="sw_cat" value="<?php echo esc_attr($cat); ?>" style="width:100%;"></p>
+    <p>
+        <label><strong>Category</strong></label><br>
+        <input type="text" name="sw_cat" value="<?php echo esc_attr($cat); ?>" style="width:100%;">
+    </p>
     
     <div style="display: flex; gap: 15px; background: #f0f0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <div style="flex: 1;"><label><strong>Latitude</strong></label><input type="text" name="sw_lat" value="<?php echo esc_attr($lat); ?>" style="width:100%;"></div>
-        <div style="flex: 1;"><label><strong>Longitude</strong></label><input type="text" name="sw_lng" value="<?php echo esc_attr($lng); ?>" style="width:100%;"></div>
+        <div style="flex: 1;">
+            <label><strong>Latitude</strong></label>
+            <input type="text" id="sw_lat_field" name="sw_lat" value="<?php echo esc_attr($lat); ?>" style="width:100%;">
+        </div>
+        <div style="flex: 1;">
+            <label><strong>Longitude</strong></label>
+            <input type="text" id="sw_lng_field" name="sw_lng" value="<?php echo esc_attr($lng); ?>" style="width:100%;">
+        </div>
     </div>
 
     <h4>Opening Hours</h4>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
         <?php foreach($days as $day): 
             $val = get_post_meta($post->ID, '_sw_h_' . $day, true); ?>
-            <p><label style="text-transform: capitalize;"><strong><?php echo $day; ?></strong></label><br>
-            <input type="text" name="sw_h_<?php echo $day; ?>" value="<?php echo esc_attr($val); ?>" style="width:100%;"></p>
+            <p>
+                <label style="text-transform: capitalize;"><strong><?php echo $day; ?></strong></label><br>
+                <input type="text" name="sw_h_<?php echo $day; ?>" value="<?php echo esc_attr($val); ?>" style="width:100%;">
+            </p>
         <?php endforeach; ?>
     </div>
+
+// 3. ADMIN META BOX (MOVED TO MAIN CONTENT AREA)
+add_action('add_meta_boxes', function() {
+    add_meta_box(
+        'sw_details', 
+        'Location Details & Daily Hours', 
+        'sw_render_metabox', 
+        'sw_location', 
+        'normal', // Sets it as the main center content box
+        'high'    // Forces it to sit right below the post title
+    );
+});
+
+function sw_render_metabox($post) {
+    $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    $addr = get_post_meta($post->ID, '_sw_addr', true);
+    $cat  = get_post_meta($post->ID, '_sw_cat', true);
+    $lat  = get_post_meta($post->ID, '_sw_lat', true);
+    $lng  = get_post_meta($post->ID, '_sw_lng', true);
+    ?>
+    <div style="padding: 10px 0;">
+        <p>
+            <label style="font-size: 14px; font-weight: 600;">Address</label><br>
+            <div style="display: flex; gap: 10px; margin-top: 5px;">
+                <input type="text" id="sw_addr_field" name="sw_addr" value="<?php echo esc_attr($addr); ?>" style="flex: 1; padding: 6px 10px;" placeholder="e.g. 59 High Street, Christchurch, BH23 1AS">
+                <button type="button" id="sw_geocode_btn" class="button button-primary" style="white-space: nowrap;">📍 Get Coordinates</button>
+            </div>
+            <span style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Enter the full address including town and postcode, then click "Get Coordinates" to auto-populate Lat/Lng.</span>
+        </p>
+        
+        <p style="margin-top: 20px;">
+            <label style="font-size: 14px; font-weight: 600;">Category</label><br>
+            <input type="text" name="sw_cat" value="<?php echo esc_attr($cat); ?>" style="width:100%; max-width: 400px; padding: 6px 10px; margin-top: 5px;" placeholder="Partner Store">
+        </p>
+        
+        <div style="display: flex; gap: 20px; background: #f6f7f7; padding: 15px; border-radius: 6px; border: 1px solid #c3c4c7; margin: 20px 0;">
+            <div style="flex: 1;">
+                <label style="font-weight: 600;">Latitude</label>
+                <input type="text" id="sw_lat_field" name="sw_lat" value="<?php echo esc_attr($lat); ?>" style="width:100%; margin-top: 5px; padding: 6px 10px;">
+            </div>
+            <div style="flex: 1;">
+                <label style="font-weight: 600;">Longitude</label>
+                <input type="text" id="sw_lng_field" name="sw_lng" value="<?php echo esc_attr($lng); ?>" style="width:100%; margin-top: 5px; padding: 6px 10px;">
+            </div>
+        </div>
+
+        <h4 style="font-size: 15px; margin-top: 25px; border-bottom: 1px solid #dcdcde; padding-bottom: 8px;">Opening Hours</h4>
+        <div style="display: grid; grid-template-columns: repeat( auto-fit, minmax(200px, 1fr) ); gap: 15px; margin-top: 15px;">
+            <?php foreach($days as $day): 
+                $val = get_post_meta($post->ID, '_sw_h_' . $day, true); ?>
+                <div>
+                    <label style="text-transform: capitalize; font-weight: 600; font-size: 13px;"><?php echo $day; ?></label>
+                    <input type="text" name="sw_h_<?php echo $day; ?>" value="<?php echo esc_attr($val); ?>" style="width:100%; margin-top: 4px; padding: 5px 8px;" placeholder="e.g. 09:00 - 17:00">
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var btn = document.getElementById('sw_geocode_btn');
+        if (!btn) return;
+
+        btn.addEventListener('click', function() {
+            var address = document.getElementById('sw_addr_field').value.trim();
+            if (!address) {
+                alert('Please enter an address first.');
+                return;
+            }
+
+            btn.textContent = 'Searching...';
+            btn.disabled = true;
+
+            var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(address) + '&limit=1';
+
+            fetch(url, { headers: { 'User-Agent': 'WP-DropOff-Locator' } })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data && data.length > 0) {
+                        document.getElementById('sw_lat_field').value = data[0].lat;
+                        document.getElementById('sw_lng_field').value = data[0].lon;
+                        btn.textContent = '✅ Found!';
+                        setTimeout(function() { btn.textContent = '📍 Get Coordinates'; btn.disabled = false; }, 2000);
+                    } else {
+                        alert('Could not find coordinates for this address. Try adding a postcode or town name.');
+                        btn.textContent = '📍 Get Coordinates';
+                        btn.disabled = false;
+                    }
+                })
+                .catch(function(err) {
+                    alert('Geocoding service error. Check connection.');
+                    btn.textContent = '📍 Get Coordinates';
+                    btn.disabled = false;
+                });
+        });
+    });
+    </script>
     <?php
 }
 
