@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: South West Drop-Off Locator Pro
- * Description: Version 6.5 - Rebuilt with Smart CSV Upsert, Premium UI v2.0, Mobile Auto-Pan Fixes & Dashboard Widget.
- * Version: 6.5
+ * Description: Version 8.2 - Fixed popup jump/disappearing bug by isolating active markers from clusters, replaced degree-based lat offset with pixel projection offset, and added security nonces.
+ * Version: 8.2
  * Author: South West Team
  */
 
@@ -32,24 +32,29 @@ add_action('manage_sw_location_posts_custom_column', function($column, $post_id)
     }
 }, 10, 2);
 
-// 3. ADMIN META BOX (MOVED TO MAIN CONTENT AREA)
+// 3. ADMIN META BOX (MAIN CONTENT AREA)
 add_action('add_meta_boxes', function() {
     add_meta_box(
-        'sw_details_main', // Changed ID forces WP layout reset to center
+        'sw_details_main',
         'Location Details & Daily Hours', 
         'sw_render_metabox', 
         'sw_location', 
-        'normal', // Main content area
-        'high'    // Top priority below post title
+        'normal',
+        'high'
     );
 });
 
 function sw_render_metabox($post) {
-    $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    $addr = get_post_meta($post->ID, '_sw_addr', true);
-    $cat  = get_post_meta($post->ID, '_sw_cat', true);
-    $lat  = get_post_meta($post->ID, '_sw_lat', true);
-    $lng  = get_post_meta($post->ID, '_sw_lng', true);
+    wp_nonce_field('sw_save_location_data', 'sw_location_nonce');
+
+    $days   = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    $addr   = get_post_meta($post->ID, '_sw_addr', true);
+    $phone  = get_post_meta($post->ID, '_sw_phone', true);
+    $mobile = get_post_meta($post->ID, '_sw_mobile', true);
+    $cat    = get_post_meta($post->ID, '_sw_cat', true);
+    $lat    = get_post_meta($post->ID, '_sw_lat', true);
+    $lng    = get_post_meta($post->ID, '_sw_lng', true);
+    $notice = get_post_meta($post->ID, '_sw_notice', true);
     ?>
     <div style="padding: 10px 0;">
         <p>
@@ -60,11 +65,27 @@ function sw_render_metabox($post) {
             </div>
             <span style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Enter the full address including town and postcode, then click "Get Coordinates" to auto-populate Lat/Lng.</span>
         </p>
-        
-        <p style="margin-top: 20px;">
-            <label style="font-size: 14px; font-weight: 600;">Category</label><br>
-            <input type="text" name="sw_cat" value="<?php echo esc_attr($cat); ?>" style="width:100%; max-width: 400px; padding: 6px 10px; margin-top: 5px;" placeholder="Partner Store">
+
+        <p style="margin-top: 15px;">
+            <label style="font-size: 14px; font-weight: 600; color: #b45309;">⚠️ Holiday / Exceptional Hours Notice (Optional)</label><br>
+            <input type="text" name="sw_notice" value="<?php echo esc_attr($notice); ?>" style="width: 100%; padding: 6px 10px; margin-top: 5px; border-color: #f59e0b;" placeholder="e.g. Closed Easter Monday or Temporary early closing at 4 PM">
+            <span style="color: #666; font-size: 12px; display: block; margin-top: 4px;">Displays as an active warning banner on the location card and map popup.</span>
         </p>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
+            <div>
+                <label style="font-size: 14px; font-weight: 600;">Telephone Number (Optional)</label><br>
+                <input type="text" name="sw_phone" value="<?php echo esc_attr($phone); ?>" style="width:100%; padding: 6px 10px; margin-top: 5px;" placeholder="e.g. 01275 123456">
+            </div>
+            <div>
+                <label style="font-size: 14px; font-weight: 600;">Mobile Number (Optional)</label><br>
+                <input type="text" name="sw_mobile" value="<?php echo esc_attr($mobile); ?>" style="width:100%; padding: 6px 10px; margin-top: 5px;" placeholder="e.g. 07123 456789">
+            </div>
+            <div>
+                <label style="font-size: 14px; font-weight: 600;">Category</label><br>
+                <input type="text" name="sw_cat" value="<?php echo esc_attr($cat); ?>" style="width:100%; padding: 6px 10px; margin-top: 5px;" placeholder="Partner Store">
+            </div>
+        </div>
         
         <div style="display: flex; gap: 20px; background: #f6f7f7; padding: 15px; border-radius: 6px; border: 1px solid #c3c4c7; margin: 20px 0;">
             <div style="flex: 1;">
@@ -78,12 +99,13 @@ function sw_render_metabox($post) {
         </div>
 
         <h4 style="font-size: 15px; margin-top: 25px; border-bottom: 1px solid #dcdcde; padding-bottom: 8px;">Opening Hours</h4>
+        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Supports formats like <code>09:00 - 17:00</code>, split shifts like <code>10AM - 1PM/2PM - 5PM</code>, or <code>Variable</code>.</p>
         <div style="display: grid; grid-template-columns: repeat( auto-fit, minmax(200px, 1fr) ); gap: 15px; margin-top: 15px;">
             <?php foreach($days as $day): 
                 $val = get_post_meta($post->ID, '_sw_h_' . $day, true); ?>
                 <div>
-                    <label style="text-transform: capitalize; font-weight: 600; font-size: 13px;"><?php echo $day; ?></label>
-                    <input type="text" name="sw_h_<?php echo $day; ?>" value="<?php echo esc_attr($val); ?>" style="width:100%; margin-top: 4px; padding: 5px 8px;" placeholder="e.g. 09:00 - 17:00">
+                    <label style="text-transform: capitalize; font-weight: 600; font-size: 13px;"><?php echo esc_html($day); ?></label>
+                    <input type="text" name="sw_h_<?php echo esc_attr($day); ?>" value="<?php echo esc_attr($val); ?>" style="width:100%; margin-top: 4px; padding: 5px 8px;" placeholder="e.g. 10AM - 1PM/2PM - 5PM or Variable">
                 </div>
             <?php endforeach; ?>
         </div>
@@ -120,7 +142,7 @@ function sw_render_metabox($post) {
                         btn.disabled = false;
                     }
                 })
-                .catch(function(err) {
+                .catch(function() {
                     alert('Geocoding service error. Check connection.');
                     btn.textContent = '📍 Get Coordinates';
                     btn.disabled = false;
@@ -134,7 +156,7 @@ function sw_render_metabox($post) {
 // 4. GEOCODING & SAVE LOGIC
 function sw_get_coords_from_address($address) {
     $url = "https://nominatim.openstreetmap.org/search?format=json&q=".urlencode($address)."&limit=1";
-    $response = wp_remote_get($url, ['user-agent' => 'WP-Locator-Pro']);
+    $response = wp_remote_get($url, ['user-agent' => 'WP-Locator-Pro', 'timeout' => 5]);
     if (is_wp_error($response)) return false;
     $data = json_decode(wp_remote_retrieve_body($response), true);
     return (!empty($data)) ? ['lat' => $data[0]['lat'], 'lng' => $data[0]['lon']] : false;
@@ -142,10 +164,15 @@ function sw_get_coords_from_address($address) {
 
 add_action('save_post', function($post_id) {
     if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+    if (!isset($_POST['sw_location_nonce']) || !wp_verify_nonce($_POST['sw_location_nonce'], 'sw_save_location_data')) return;
+    if (!current_user_can('edit_post', $post_id)) return;
     if (!isset($_POST['sw_addr'])) return;
 
     update_post_meta($post_id, '_sw_addr', sanitize_text_field($_POST['sw_addr']));
-    update_post_meta($post_id, '_sw_cat', sanitize_text_field($_POST['sw_cat']));
+    update_post_meta($post_id, '_sw_phone', sanitize_text_field($_POST['sw_phone'] ?? ''));
+    update_post_meta($post_id, '_sw_mobile', sanitize_text_field($_POST['sw_mobile'] ?? ''));
+    update_post_meta($post_id, '_sw_cat', sanitize_text_field($_POST['sw_cat'] ?? ''));
+    update_post_meta($post_id, '_sw_notice', sanitize_text_field($_POST['sw_notice'] ?? ''));
 
     foreach(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as $day) {
         if (isset($_POST['sw_h_' . $day])) {
@@ -165,16 +192,71 @@ add_action('save_post', function($post_id) {
     }
 });
 
-// 5. BULK IMPORT (WITH SMART UPSERT UPDATE LOGIC)
+// 5. BULK IMPORT & EXPORT (CSV TOOLS)
 add_action('admin_menu', function() {
-    add_submenu_page('edit.php?post_type=sw_location', 'Bulk Import', 'Bulk Import', 'manage_options', 'sw-import', 'sw_render_import_page');
+    add_submenu_page('edit.php?post_type=sw_location', 'CSV Tools', 'CSV Import / Export', 'manage_options', 'sw-csv-tools', 'sw_render_csv_tools_page');
 });
 
-function sw_render_import_page() {
+// CSV Export Handler
+add_action('admin_init', function() {
+    if (isset($_POST['sw_export_nonce']) && wp_verify_nonce($_POST['sw_export_nonce'], 'sw_export_action')) {
+        if (!current_user_can('manage_options')) return;
+
+        $filename = 'drop-off-locations-' . date('Y-m-d-His') . '.csv';
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=' . $filename);
+
+        $output = fopen('php://output', 'w');
+
+        fputcsv($output, [
+            'Title', 'Address', 'Phone', 'Mobile', 'Category', 
+            'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 
+            'Lat', 'Lng', 'Notice'
+        ]);
+
+        $query = new WP_Query([
+            'post_type'      => 'sw_location',
+            'posts_per_page' => -1,
+            'post_status'    => 'publish'
+        ]);
+
+        while ($query->have_posts()) {
+            $query->the_post();
+            $id = get_the_ID();
+
+            fputcsv($output, [
+                get_the_title(),
+                get_post_meta($id, '_sw_addr', true),
+                get_post_meta($id, '_sw_phone', true),
+                get_post_meta($id, '_sw_mobile', true),
+                get_post_meta($id, '_sw_cat', true) ?: 'Partner Store',
+                get_post_meta($id, '_sw_h_mon', true) ?: 'Closed',
+                get_post_meta($id, '_sw_h_tue', true) ?: 'Closed',
+                get_post_meta($id, '_sw_h_wed', true) ?: 'Closed',
+                get_post_meta($id, '_sw_h_thu', true) ?: 'Closed',
+                get_post_meta($id, '_sw_h_fri', true) ?: 'Closed',
+                get_post_meta($id, '_sw_h_sat', true) ?: 'Closed',
+                get_post_meta($id, '_sw_h_sun', true) ?: 'Closed',
+                get_post_meta($id, '_sw_lat', true),
+                get_post_meta($id, '_sw_lng', true),
+                get_post_meta($id, '_sw_notice', true)
+            ]);
+        }
+        wp_reset_postdata();
+
+        fclose($output);
+        exit;
+    }
+});
+
+function sw_render_csv_tools_page() {
     if (isset($_POST['sw_import_nonce']) && wp_verify_nonce($_POST['sw_import_nonce'], 'sw_import_action')) {
+        if (!current_user_can('manage_options')) return;
+
         if (!empty($_FILES['sw_csv']['tmp_name'])) {
             $handle = fopen($_FILES['sw_csv']['tmp_name'], 'r');
-            fgetcsv($handle); // Skip header row
+            fgetcsv($handle);
             $updated_count = 0;
             $inserted_count = 0;
 
@@ -183,7 +265,6 @@ function sw_render_import_page() {
 
                 $title = sanitize_text_field($data[0]);
 
-                // Check if location already exists by title
                 $existing = get_posts([
                     'post_type'   => 'sw_location',
                     'title'       => $title,
@@ -206,18 +287,24 @@ function sw_render_import_page() {
 
                 if ($post_id) {
                     update_post_meta($post_id, '_sw_addr', sanitize_text_field($data[1] ?? ''));
-                    update_post_meta($post_id, '_sw_cat', sanitize_text_field($data[2] ?? 'Partner Store'));
-                    update_post_meta($post_id, '_sw_h_mon', sanitize_text_field($data[3] ?? 'Closed'));
-                    update_post_meta($post_id, '_sw_h_tue', sanitize_text_field($data[4] ?? 'Closed'));
-                    update_post_meta($post_id, '_sw_h_wed', sanitize_text_field($data[5] ?? 'Closed'));
-                    update_post_meta($post_id, '_sw_h_thu', sanitize_text_field($data[6] ?? 'Closed'));
-                    update_post_meta($post_id, '_sw_h_fri', sanitize_text_field($data[7] ?? 'Closed'));
-                    update_post_meta($post_id, '_sw_h_sat', sanitize_text_field($data[8] ?? 'Closed'));
-                    update_post_meta($post_id, '_sw_h_sun', sanitize_text_field($data[9] ?? 'Closed'));
+                    update_post_meta($post_id, '_sw_phone', sanitize_text_field($data[2] ?? ''));
+                    update_post_meta($post_id, '_sw_mobile', sanitize_text_field($data[3] ?? ''));
+                    update_post_meta($post_id, '_sw_cat', sanitize_text_field($data[4] ?? 'Partner Store'));
+                    update_post_meta($post_id, '_sw_h_mon', sanitize_text_field($data[5] ?? 'Closed'));
+                    update_post_meta($post_id, '_sw_h_tue', sanitize_text_field($data[6] ?? 'Closed'));
+                    update_post_meta($post_id, '_sw_h_wed', sanitize_text_field($data[7] ?? 'Closed'));
+                    update_post_meta($post_id, '_sw_h_thu', sanitize_text_field($data[8] ?? 'Closed'));
+                    update_post_meta($post_id, '_sw_h_fri', sanitize_text_field($data[9] ?? 'Closed'));
+                    update_post_meta($post_id, '_sw_h_sat', sanitize_text_field($data[10] ?? 'Closed'));
+                    update_post_meta($post_id, '_sw_h_sun', sanitize_text_field($data[11] ?? 'Closed'));
 
-                    if (!empty($data[10]) && !empty($data[11])) {
-                        update_post_meta($post_id, '_sw_lat', sanitize_text_field($data[10]));
-                        update_post_meta($post_id, '_sw_lng', sanitize_text_field($data[11]));
+                    if (!empty($data[12]) && !empty($data[13])) {
+                        update_post_meta($post_id, '_sw_lat', sanitize_text_field($data[12]));
+                        update_post_meta($post_id, '_sw_lng', sanitize_text_field($data[13]));
+                    }
+
+                    if (isset($data[14])) {
+                        update_post_meta($post_id, '_sw_notice', sanitize_text_field($data[14]));
                     }
                 }
             }
@@ -227,21 +314,43 @@ function sw_render_import_page() {
     }
     ?>
     <div class="wrap">
-        <h1>Bulk Import Locations</h1>
-        <p>Upload your CSV file below. If a location already exists, its metadata will be updated without creating duplicates.</p>
-        <form method="post" enctype="multipart/form-data">
-            <?php wp_nonce_field('sw_import_action', 'sw_import_nonce'); ?>
-            <input type="file" name="sw_csv" accept=".csv" required style="margin-bottom:15px; display:block;">
-            <?php submit_button('Run Import'); ?>
-        </form>
+        <h1>Drop-Off Locations CSV Tools</h1>
+        
+        <div style="display: flex; gap: 30px; margin-top: 20px;">
+            <div style="flex: 1; background: #fff; border: 1px solid #c3c4c7; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <h2>📥 Export Locations to CSV</h2>
+                <p>Download a spreadsheet containing all published locations with addresses, phone numbers, opening hours, latitude, longitude, and holiday notices.</p>
+                <form method="post">
+                    <?php wp_nonce_field('sw_export_action', 'sw_export_nonce'); ?>
+                    <?php submit_button('Download CSV Spreadsheet', 'primary', 'sw_submit_export', false); ?>
+                </form>
+            </div>
+
+            <div style="flex: 1; background: #fff; border: 1px solid #c3c4c7; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <h2>📤 Bulk Import / Upsert Locations</h2>
+                <p>Upload a CSV file to create or update existing locations by title.</p>
+                <p style="font-size: 12px; color: #666;"><strong>Expected Columns:</strong> Title, Address, Phone, Mobile, Category, Mon, Tue, Wed, Thu, Fri, Sat, Sun, Lat, Lng, Notice.</p>
+                <form method="post" enctype="multipart/form-data">
+                    <?php wp_nonce_field('sw_import_action', 'sw_import_nonce'); ?>
+                    <input type="file" name="sw_csv" accept=".csv" required style="margin-bottom:15px; display:block;">
+                    <?php submit_button('Run Import', 'secondary', 'sw_submit_import', false); ?>
+                </form>
+            </div>
+        </div>
     </div>
     <?php
 }
 
 // 6. FRONTEND SHORTCODE [dropoff_map]
 add_action('wp_enqueue_scripts', function() {
+    // Leaflet Core
     wp_enqueue_style('leaflet-css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
     wp_enqueue_script('leaflet-js', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], null, true);
+
+    // Leaflet MarkerCluster
+    wp_enqueue_style('leaflet-cluster-css', 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css');
+    wp_enqueue_style('leaflet-cluster-default-css', 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css');
+    wp_enqueue_script('leaflet-cluster-js', 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js', ['leaflet-js'], null, true);
 });
 
 add_shortcode('dropoff_map', function() {
@@ -259,7 +368,10 @@ add_shortcode('dropoff_map', function() {
                 'lat'      => (float)$lat,
                 'lng'      => (float)$lng,
                 'address'  => get_post_meta($id, '_sw_addr', true),
+                'phone'    => get_post_meta($id, '_sw_phone', true),
+                'mobile'   => get_post_meta($id, '_sw_mobile', true),
                 'category' => get_post_meta($id, '_sw_cat', true) ?: 'Partner Store',
+                'notice'   => get_post_meta($id, '_sw_notice', true),
                 'hours'    => [
                     'Mon' => get_post_meta($id, '_sw_h_mon', true) ?: 'Closed',
                     'Tue' => get_post_meta($id, '_sw_h_tue', true) ?: 'Closed',
@@ -279,7 +391,6 @@ add_shortcode('dropoff_map', function() {
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap');
 
-        /* BASE OVERRIDES TO STOP THEME INHERITANCE */
         .sw-container * {
             box-sizing: border-box !important;
         }
@@ -294,7 +405,6 @@ add_shortcode('dropoff_map', function() {
             margin: 0 auto;
         }
 
-        /* SEARCH BAR TIGHTENING */
         .sw-search-wrap {
             display: grid;
             grid-template-columns: 1fr auto auto;
@@ -304,7 +414,7 @@ add_shortcode('dropoff_map', function() {
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
             border: 1px solid #e5e7eb;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .sw-search-input-container {
@@ -359,7 +469,109 @@ add_shortcode('dropoff_map', function() {
             font-size: 0.88rem !important;
         }
 
-        /* MAIN LAYOUT */
+        /* Filter Pills */
+        .sw-filters-wrap {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .sw-filter-pill {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #4b5563;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .sw-filter-pill:hover {
+            border-color: #1a7a4a;
+            color: #1a7a4a;
+        }
+
+        .sw-filter-pill.active {
+            background: #1a7a4a;
+            border-color: #1a7a4a;
+            color: #fff;
+        }
+
+        /* Open/Closed/Variable Badges & Notice Banner */
+        .sw-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            font-size: 0.7rem !important;
+            font-weight: 700 !important;
+            padding: 3px 8px !important;
+            border-radius: 12px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.02em !important;
+            white-space: nowrap !important;
+            line-height: 1.2 !important;
+            flex-shrink: 0 !important;
+            max-width: fit-content !important;
+        }
+
+        .sw-badge-open {
+            background: #d1fae5 !important;
+            color: #065f46 !important;
+            border: 1px solid #a7f3d0 !important;
+        }
+
+        .sw-badge-closed {
+            background: #fee2e2 !important;
+            color: #991b1b !important;
+            border: 1px solid #fecaca !important;
+        }
+
+        .sw-badge-variable {
+            background: #fef3c7 !important;
+            color: #92400e !important;
+            border: 1px solid #fde68a !important;
+        }
+
+        .sw-notice-banner {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #92400e;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            margin-top: 4px;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+
+        .sw-copy-btn {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            color: #374151;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            transition: all 0.15s ease;
+        }
+
+        .sw-copy-btn:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
         .sw-layout {
             display: grid;
             grid-template-columns: 340px 1fr;
@@ -403,7 +615,6 @@ add_shortcode('dropoff_map', function() {
         .sw-results-list::-webkit-scrollbar { width: 5px; }
         .sw-results-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
 
-        /* TIGHT CARDS */
         .sw-card {
             width: 100%;
             background: #fff;
@@ -416,7 +627,15 @@ add_shortcode('dropoff_map', function() {
             transition: all 0.15s ease;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 6px;
+        }
+
+        .sw-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         .sw-card:hover {
@@ -438,6 +657,8 @@ add_shortcode('dropoff_map', function() {
             margin: 0 !important;
             padding: 0 !important;
             line-height: 1.3 !important;
+            flex: 1 1 140px;
+            word-break: break-word;
         }
 
         .sw-card p {
@@ -448,7 +669,23 @@ add_shortcode('dropoff_map', function() {
             line-height: 1.3 !important;
         }
 
-        /* MAP CONTAINER */
+        .sw-card-phone-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-top: 2px;
+        }
+
+        .sw-card-phone {
+            font-size: 0.8rem !important;
+            color: #1a7a4a !important;
+            font-weight: 600 !important;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            text-decoration: none;
+        }
+
         .sw-map-container {
             border-radius: 14px;
             overflow: hidden;
@@ -465,7 +702,6 @@ add_shortcode('dropoff_map', function() {
             z-index: 1;
         }
 
-        /* POPUP FIXES */
         .leaflet-popup {
             margin-bottom: 30px;
         }
@@ -480,6 +716,32 @@ add_shortcode('dropoff_map', function() {
             font-size: 0.95rem !important;
             display: block;
             margin-bottom: 4px;
+        }
+
+        .sw-hours-table {
+            width: 100%;
+            font-size: 11px;
+            border-collapse: collapse;
+            margin-top: 6px;
+        }
+
+        .sw-hours-table td {
+            padding: 2px 0;
+            vertical-align: top;
+            line-height: 1.3;
+        }
+
+        .sw-hours-table td.sw-day-label {
+            font-weight: 600;
+            color: #1a7a4a;
+            width: 35px;
+            padding-right: 6px;
+        }
+
+        .sw-hours-table td.sw-time-val {
+            text-align: right;
+            word-break: break-word;
+            color: #374151;
         }
 
         @media (max-width: 900px) {
@@ -507,6 +769,13 @@ add_shortcode('dropoff_map', function() {
             <button class="sw-locate-btn" id="sw-locate-btn">📍 Near Me</button>
         </div>
 
+        <div class="sw-filters-wrap">
+            <button class="sw-filter-pill active" data-filter="all">All Locations</button>
+            <button class="sw-filter-pill" data-filter="open">🟢 Open Now</button>
+            <button class="sw-filter-pill" data-filter="variable">🟡 Variable</button>
+            <button class="sw-filter-pill" data-filter="closed">🔴 Closed</button>
+        </div>
+
         <div class="sw-layout">
             <div class="sw-sidebar">
                 <div class="sw-sidebar-header">
@@ -522,24 +791,147 @@ add_shortcode('dropoff_map', function() {
     </div>
 
     <script>
+    function swCopyText(text, btnElement) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+                var oldText = btnElement.innerHTML;
+                btnElement.innerHTML = '✅ Copied!';
+                setTimeout(function() { btnElement.innerHTML = oldText; }, 2000);
+            });
+        } else {
+            var tempInput = document.createElement('input');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            var oldText = btnElement.innerHTML;
+            btnElement.innerHTML = '✅ Copied!';
+            setTimeout(function() { btnElement.innerHTML = oldText; }, 2000);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         if (typeof L === 'undefined') return;
 
         var rawData = <?php echo json_encode($locations); ?>;
+        var currentStatusFilter = 'all';
+
+        // ADVANCED OPEN / CLOSED / VARIABLE LOGIC
+        function getOpenStatus(hoursObj) {
+            var daysMap = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            var now = new Date();
+            var dayName = daysMap[now.getDay()];
+            var todayHours = hoursObj[dayName] ? hoursObj[dayName].trim() : '';
+
+            if (!todayHours || todayHours.toLowerCase() === 'closed') {
+                return { isOpen: false, isVariable: false, text: 'Closed Today' };
+            }
+
+            if (todayHours.toLowerCase().includes('variable')) {
+                return { isOpen: false, isVariable: true, text: 'Times Vary' };
+            }
+
+            if (todayHours.toLowerCase().includes('24 hours') || todayHours.toLowerCase().includes('24/7')) {
+                return { isOpen: true, isVariable: false, text: 'Open 24 Hours' };
+            }
+
+            function parseTimeString(timeStr) {
+                timeStr = timeStr.trim().toLowerCase();
+                var isPM = timeStr.includes('pm');
+                var isAM = timeStr.includes('am');
+                var clean = timeStr.replace(/(am|pm)/g, '').trim();
+                var timeParts = clean.split(':');
+                var hours = parseInt(timeParts[0], 10);
+                var minutes = timeParts[1] ? parseInt(timeParts[1], 10) : 0;
+
+                if (isNaN(hours)) return null;
+
+                if (isPM && hours < 12) hours += 12;
+                if (isAM && hours === 12) hours = 0;
+
+                return hours * 60 + minutes;
+            }
+
+            var currentMins = now.getHours() * 60 + now.getMinutes();
+            var shiftWindows = todayHours.split(/[\/,]/);
+            var isCurrentlyOpen = false;
+
+            for (var i = 0; i < shiftWindows.length; i++) {
+                var rangeParts = shiftWindows[i].split('-');
+                if (rangeParts.length === 2) {
+                    var openMins = parseTimeString(rangeParts[0]);
+                    var closeMins = parseTimeString(rangeParts[1]);
+
+                    if (openMins !== null && closeMins !== null) {
+                        if (currentMins >= openMins && currentMins < closeMins) {
+                            isCurrentlyOpen = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (isCurrentlyOpen) {
+                return { isOpen: true, isVariable: false, text: 'Open Now' };
+            } else {
+                return { isOpen: false, isVariable: false, text: 'Closed' };
+            }
+        }
+
+        function getBadgeHTML(status) {
+            if (status.isVariable) {
+                return '<span class="sw-badge sw-badge-variable">🟡 ' + status.text + '</span>';
+            }
+            if (status.isOpen) {
+                return '<span class="sw-badge sw-badge-open">🟢 ' + status.text + '</span>';
+            }
+            return '<span class="sw-badge sw-badge-closed">🔴 ' + status.text + '</span>';
+        }
         
-        // Configure Map with auto-pan top padding
-        var map = L.map('sw-map', {
-            autoPanPaddingTopLeft: L.point(30, 100),
-            autoPanPaddingBottomRight: L.point(30, 30)
-        }).setView([51.15, -2.9], 9);
+        var map = L.map('sw-map').setView([51.15, -2.9], 9);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        // PREVENT #close HASH JUMP ON POPUP CLOSE
+        // LEAFLET MARKER CLUSTER GROUP
+        var clusterGroup = L.markerClusterGroup ? L.markerClusterGroup() : null;
+        if (clusterGroup) {
+            map.addLayer(clusterGroup);
+        }
+
+        var activeStandaloneMarker = null;
+
+        function restoreActiveMarkerToCluster() {
+            if (activeStandaloneMarker && clusterGroup) {
+                if (map.hasLayer(activeStandaloneMarker)) {
+                    map.removeLayer(activeStandaloneMarker);
+                }
+                clusterGroup.addLayer(activeStandaloneMarker);
+                activeStandaloneMarker = null;
+            }
+        }
+
+        function isolateMarkerFromCluster(marker) {
+            if (!clusterGroup) return;
+            if (activeStandaloneMarker && activeStandaloneMarker !== marker) {
+                restoreActiveMarkerToCluster();
+            }
+            if (clusterGroup.hasLayer(marker)) {
+                clusterGroup.removeLayer(marker);
+                marker.addTo(map);
+                activeStandaloneMarker = marker;
+            }
+        }
+
         map.on('popupopen', function(e) {
+            var marker = e.popup._source;
+            if (marker) {
+                isolateMarkerFromCluster(marker);
+            }
+
             var closeBtn = e.popup._container.querySelector('.leaflet-popup-close-button');
             if (closeBtn) {
                 closeBtn.addEventListener('click', function(ev) {
@@ -550,55 +942,179 @@ add_shortcode('dropoff_map', function() {
             }
         });
 
+        map.on('popupclose', function(e) {
+            if (e.popup._source === activeStandaloneMarker) {
+                restoreActiveMarkerToCluster();
+            }
+            document.querySelectorAll('.sw-card').forEach(function(c) {
+                c.classList.remove('active');
+            });
+        });
+
         var markers = [];
 
-        function buildPopupHTML(loc) {
-            var html = '<b>' + loc.name + '</b>';
-            html += '<p style="margin:0 0 8px 0; color:#6b7280; font-size:12px;">' + loc.address + '</p>';
-            html += '<table style="width:100%; font-size:12px; border-collapse:collapse;">';
-            for (var day in loc.hours) {
-                html += '<tr><td style="padding:2px 6px 2px 0; font-weight:600; color:#1a7a4a;">' + day + '</td><td style="padding:2px 0; text-align:right;">' + loc.hours[day] + '</td></tr>';
+        function buildPopupElement(loc, status) {
+            var container = document.createElement('div');
+            
+            var header = document.createElement('div');
+            header.style.cssText = 'display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px; flex-wrap:wrap;';
+            header.innerHTML = '<b>' + loc.name + '</b>' + getBadgeHTML(status);
+            container.appendChild(header);
+
+            if (loc.notice && loc.notice.trim() !== '') {
+                var notice = document.createElement('div');
+                notice.className = 'sw-notice-banner';
+                notice.innerHTML = '<span>⚠️</span><span>' + loc.notice + '</span>';
+                container.appendChild(notice);
             }
-            html += '</table>';
-            return html;
+
+            var addrP = document.createElement('p');
+            addrP.style.cssText = 'margin:0 0 4px 0; color:#6b7280; font-size:12px;';
+            addrP.textContent = loc.address;
+            container.appendChild(addrP);
+
+            var copyBtn = document.createElement('button');
+            copyBtn.className = 'sw-copy-btn';
+            copyBtn.textContent = '📋 Copy Address';
+            copyBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                swCopyText(loc.address, copyBtn);
+            });
+            container.appendChild(copyBtn);
+
+            var hasPhone = loc.phone && loc.phone.trim() !== '';
+            var hasMobile = loc.mobile && loc.mobile.trim() !== '';
+
+            if (hasPhone || hasMobile) {
+                var phoneWrap = document.createElement('div');
+                phoneWrap.style.cssText = 'margin-top:8px; margin-bottom:8px; font-size:12px; display:flex; flex-direction:column; gap:2px;';
+                if (hasPhone) {
+                    phoneWrap.innerHTML += '<a href="tel:' + loc.phone + '" style="color:#1a7a4a; text-decoration:none; font-weight:600;">📞 Tel: ' + loc.phone + '</a>';
+                }
+                if (hasMobile) {
+                    phoneWrap.innerHTML += '<a href="tel:' + loc.mobile + '" style="color:#1a7a4a; text-decoration:none; font-weight:600;">📱 Mob: ' + loc.mobile + '</a>';
+                }
+                container.appendChild(phoneWrap);
+            }
+
+            var table = document.createElement('table');
+            table.className = 'sw-hours-table';
+            var tBody = '';
+            for (var day in loc.hours) {
+                tBody += '<tr><td class="sw-day-label">' + day + '</td><td class="sw-time-val">' + loc.hours[day] + '</td></tr>';
+            }
+            table.innerHTML = tBody;
+            container.appendChild(table);
+
+            return container;
         }
 
-        function renderList(data) {
+        function renderList(data, shouldAutoPan) {
             var listEl = document.getElementById('sw-results-list');
             document.getElementById('sw-count').textContent = data.length;
             listEl.innerHTML = '';
 
-            // Clear map markers
-            markers.forEach(function(m) { map.removeLayer(m.marker); });
+            if (activeStandaloneMarker) {
+                if (map.hasLayer(activeStandaloneMarker)) {
+                    map.removeLayer(activeStandaloneMarker);
+                }
+                activeStandaloneMarker = null;
+            }
+
+            if (clusterGroup) {
+                clusterGroup.clearLayers();
+            } else {
+                markers.forEach(function(m) { map.removeLayer(m.marker); });
+            }
             markers = [];
 
-            data.forEach(function(loc, index) {
+            var bounds = [];
+
+            data.forEach(function(loc) {
+                var status = getOpenStatus(loc.hours);
+
                 var popupOptions = {
                     autoPan: true,
-                    autoPanPaddingTopLeft: L.point(20, 110),
-                    autoPanPaddingBottomRight: L.point(20, 20),
+                    autoPanPadding: L.point(30, 30),
                     keepInView: false,
                     closeButton: true
                 };
 
-                // Add Marker
-                var marker = L.marker([loc.lat, loc.lng]).addTo(map);
-                var popup = L.popup(popupOptions).setContent(buildPopupHTML(loc));
+                var marker = L.marker([loc.lat, loc.lng]);
+                var popup = L.popup(popupOptions).setContent(buildPopupElement(loc, status));
                 marker.bindPopup(popup);
-                markers.push({ id: loc.id, marker: marker });
 
-                // Add Sidebar Card
+                if (clusterGroup) {
+                    clusterGroup.addLayer(marker);
+                } else {
+                    marker.addTo(map);
+                }
+
+                markers.push({ id: loc.id, marker: marker });
+                bounds.push([loc.lat, loc.lng]);
+
                 var card = document.createElement('div');
                 card.className = 'sw-card';
-                card.innerHTML = '<h4>' + loc.name + '</h4><p>' + loc.address + '</p>';
+
+                var cardHeader = document.createElement('div');
+                cardHeader.className = 'sw-card-header';
+                cardHeader.innerHTML = '<h4>' + loc.name + '</h4>' + getBadgeHTML(status);
+                card.appendChild(cardHeader);
+
+                if (loc.notice && loc.notice.trim() !== '') {
+                    var notice = document.createElement('div');
+                    notice.className = 'sw-notice-banner';
+                    notice.innerHTML = '<span>⚠️</span><span>' + loc.notice + '</span>';
+                    card.appendChild(notice);
+                }
+
+                var cardAddr = document.createElement('p');
+                cardAddr.textContent = loc.address;
+                card.appendChild(cardAddr);
+
+                var btnWrap = document.createElement('div');
+                var copyBtn = document.createElement('button');
+                copyBtn.className = 'sw-copy-btn';
+                copyBtn.textContent = '📋 Copy Address';
+                copyBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    swCopyText(loc.address, copyBtn);
+                });
+                btnWrap.appendChild(copyBtn);
+                card.appendChild(btnWrap);
+
+                var hasPhone = loc.phone && loc.phone.trim() !== '';
+                var hasMobile = loc.mobile && loc.mobile.trim() !== '';
+
+                if (hasPhone || hasMobile) {
+                    var phoneWrap = document.createElement('div');
+                    phoneWrap.className = 'sw-card-phone-wrap';
+                    if (hasPhone) {
+                        phoneWrap.innerHTML += '<a href="tel:' + loc.phone + '" class="sw-card-phone" onclick="event.stopPropagation();">📞 Tel: ' + loc.phone + '</a>';
+                    }
+                    if (hasMobile) {
+                        phoneWrap.innerHTML += '<a href="tel:' + loc.mobile + '" class="sw-card-phone" onclick="event.stopPropagation();">📱 Mob: ' + loc.mobile + '</a>';
+                    }
+                    card.appendChild(phoneWrap);
+                }
                 
                 card.addEventListener('click', function() {
-                    document.querySelectorAll('.sw-card').forEach(c => c.classList.remove('active'));
+                    document.querySelectorAll('.sw-card').forEach(function(c) {
+                        c.classList.remove('active');
+                    });
                     card.classList.add('active');
-                    
-                    var offsetLat = loc.lat + 0.0025;
-                    map.flyTo([offsetLat, loc.lng], 14, { duration: 0.8 });
-                    
+
+                    // Pull marker out of cluster immediately so it cannot be swallowed
+                    isolateMarkerFromCluster(marker);
+
+                    var targetZoom = map.getZoom() < 14 ? 14 : map.getZoom();
+
+                    // Exact pixel offset so tall popup fits cleanly above the pin at any zoom
+                    var targetPoint = map.project([loc.lat, loc.lng], targetZoom).subtract([0, 90]);
+                    var targetLatLng = map.unproject(targetPoint, targetZoom);
+
+                    map.setView(targetLatLng, targetZoom, { animate: true });
+
                     setTimeout(function() {
                         marker.openPopup();
                     }, 250);
@@ -606,32 +1122,56 @@ add_shortcode('dropoff_map', function() {
 
                 listEl.appendChild(card);
             });
+
+            if (shouldAutoPan && bounds.length > 0) {
+                var groupBounds = L.latLngBounds(bounds);
+                if (!map.getBounds().contains(groupBounds)) {
+                    map.fitBounds(groupBounds, { padding: [50, 50], maxZoom: 13 });
+                }
+            }
         }
 
-        renderList(rawData);
+        renderList(rawData, false);
 
-        // Search Filter
-        function doSearch() {
+        function doSearch(isUserAction) {
             var query = document.getElementById('sw-search-input').value.toLowerCase().trim();
-            if (!query) {
-                renderList(rawData);
-                return;
-            }
+            
             var filtered = rawData.filter(function(loc) {
-                return loc.name.toLowerCase().includes(query) || loc.address.toLowerCase().includes(query);
+                var matchesQuery = !query || 
+                       loc.name.toLowerCase().includes(query) || 
+                       loc.address.toLowerCase().includes(query) || 
+                       (loc.phone && loc.phone.toLowerCase().includes(query)) ||
+                       (loc.mobile && loc.mobile.toLowerCase().includes(query)) ||
+                       (loc.notice && loc.notice.toLowerCase().includes(query));
+
+                var status = getOpenStatus(loc.hours);
+                var matchesFilter = true;
+                if (currentStatusFilter === 'open') matchesFilter = status.isOpen;
+                if (currentStatusFilter === 'variable') matchesFilter = status.isVariable;
+                if (currentStatusFilter === 'closed') matchesFilter = (!status.isOpen && !status.isVariable);
+
+                return matchesQuery && matchesFilter;
             });
-            renderList(filtered);
-            if (filtered.length > 0) {
-                map.flyTo([filtered[0].lat + 0.0025, filtered[0].lng], 12);
-            }
+
+            renderList(filtered, isUserAction === true);
         }
 
-        document.getElementById('sw-search-btn').addEventListener('click', doSearch);
+        document.getElementById('sw-search-btn').addEventListener('click', function() { doSearch(true); });
         document.getElementById('sw-search-input').addEventListener('keyup', function(e) {
-            if (e.key === 'Enter') doSearch();
+            if (e.key === 'Enter') doSearch(true);
         });
 
-        // Geolocation "Near Me"
+        document.querySelectorAll('.sw-filter-pill').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.sw-filter-pill').forEach(function(b) {
+                    b.classList.remove('active');
+                });
+                btn.classList.add('active');
+                currentStatusFilter = btn.getAttribute('data-filter');
+                doSearch(false);
+            });
+        });
+
         document.getElementById('sw-locate-btn').addEventListener('click', function() {
             if (!navigator.geolocation) {
                 alert('Geolocation is not supported by your browser.');
@@ -653,10 +1193,7 @@ add_shortcode('dropoff_map', function() {
     return ob_get_clean();
 });
 
-// =========================================================================
 // 7. DASHBOARD WIDGET: QUICK ADD LOCATION
-// =========================================================================
-
 add_action('wp_dashboard_setup', function() {
     wp_add_dashboard_widget(
         'sw_quick_add_widget',
@@ -667,11 +1204,19 @@ add_action('wp_dashboard_setup', function() {
 
 function sw_render_dashboard_widget() {
     if (isset($_POST['sw_quick_add_nonce']) && wp_verify_nonce($_POST['sw_quick_add_nonce'], 'sw_quick_add_action')) {
-        $title = sanitize_text_field($_POST['sw_quick_title'] ?? '');
-        $addr  = sanitize_text_field($_POST['sw_quick_addr'] ?? '');
-        $cat   = sanitize_text_field($_POST['sw_quick_cat'] ?? 'Partner Store');
-        $lat   = sanitize_text_field($_POST['sw_quick_lat'] ?? '');
-        $lng   = sanitize_text_field($_POST['sw_quick_lng'] ?? '');
+        if (!current_user_can('edit_posts')) {
+            echo '<div class="notice notice-error inline" style="margin:0 0 15px 0;"><p>❌ Permission denied.</p></div>';
+            return;
+        }
+
+        $title  = sanitize_text_field($_POST['sw_quick_title'] ?? '');
+        $addr   = sanitize_text_field($_POST['sw_quick_addr'] ?? '');
+        $phone  = sanitize_text_field($_POST['sw_quick_phone'] ?? '');
+        $mobile = sanitize_text_field($_POST['sw_quick_mobile'] ?? '');
+        $cat    = sanitize_text_field($_POST['sw_quick_cat'] ?? 'Partner Store');
+        $lat    = sanitize_text_field($_POST['sw_quick_lat'] ?? '');
+        $lng    = sanitize_text_field($_POST['sw_quick_lng'] ?? '');
+        $notice = sanitize_text_field($_POST['sw_quick_notice'] ?? '');
 
         if (!empty($title) && !empty($addr)) {
             $post_id = wp_insert_post([
@@ -682,7 +1227,10 @@ function sw_render_dashboard_widget() {
 
             if ($post_id) {
                 update_post_meta($post_id, '_sw_addr', $addr);
+                update_post_meta($post_id, '_sw_phone', $phone);
+                update_post_meta($post_id, '_sw_mobile', $mobile);
                 update_post_meta($post_id, '_sw_cat', $cat);
+                update_post_meta($post_id, '_sw_notice', $notice);
                 
                 if (!empty($lat) && !empty($lng)) {
                     update_post_meta($post_id, '_sw_lat', $lat);
@@ -695,7 +1243,6 @@ function sw_render_dashboard_widget() {
                     }
                 }
 
-                // Save custom or default opening hours
                 $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
                 foreach ($days as $day) {
                     $hours = sanitize_text_field($_POST['sw_quick_h_' . $day] ?? 'Closed');
@@ -725,6 +1272,27 @@ function sw_render_dashboard_widget() {
             </div>
         </div>
 
+        <div>
+            <label style="font-weight: 600; display: block; margin-bottom: 4px; color: #b45309;">⚠️ Exceptional Hours Notice (Optional)</label>
+            <input type="text" name="sw_quick_notice" placeholder="e.g. Closed Easter Monday" style="width:100%; border-color: #f59e0b;">
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <div style="flex: 1;">
+                <label style="font-weight: 600; display: block; margin-bottom: 4px;">Telephone (Optional)</label>
+                <input type="text" name="sw_quick_phone" placeholder="e.g. 01275 123456" style="width:100%;">
+            </div>
+            <div style="flex: 1;">
+                <label style="font-weight: 600; display: block; margin-bottom: 4px;">Mobile (Optional)</label>
+                <input type="text" name="sw_quick_mobile" placeholder="e.g. 07123 456789" style="width:100%;">
+            </div>
+        </div>
+
+        <div>
+            <label style="font-weight: 600; display: block; margin-bottom: 4px;">Category</label>
+            <input type="text" name="sw_quick_cat" value="Partner Store" style="width:100%;">
+        </div>
+
         <div style="display: flex; gap: 10px;">
             <div style="flex: 1;">
                 <label style="font-weight: 600; display: block; margin-bottom: 4px;">Latitude</label>
@@ -736,12 +1304,6 @@ function sw_render_dashboard_widget() {
             </div>
         </div>
 
-        <div>
-            <label style="font-weight: 600; display: block; margin-bottom: 4px;">Category</label>
-            <input type="text" name="sw_quick_cat" value="Partner Store" style="width:100%;">
-        </div>
-
-        <!-- COLLAPSIBLE OPENING HOURS -->
         <details style="background: #f6f7f7; padding: 10px 12px; border-radius: 6px; border: 1px solid #c3c4c7;">
             <summary style="font-weight: 600; cursor: pointer; user-select: none;">🕒 Opening Hours (Click to edit)</summary>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
