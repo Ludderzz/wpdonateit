@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: South West Drop-Off Locator Pro
- * Description: Version 6.5 - Rebuilt with Smart CSV Upsert, Premium UI v2.0, Mobile Auto-Pan Fixes & Dashboard Widget.
- * Version: 6.5
+ * Description: Version 6.6 - Rebuilt with Smart CSV Upsert, Premium UI v2.0, Mobile Auto-Pan Fixes & Dashboard Widget.
+ * Version: 6.6
  * Author: South West Team
  */
 
@@ -527,11 +527,7 @@ add_shortcode('dropoff_map', function() {
 
         var rawData = <?php echo json_encode($locations); ?>;
         
-        // Configure Map with auto-pan top padding
-        var map = L.map('sw-map', {
-            autoPanPaddingTopLeft: L.point(30, 100),
-            autoPanPaddingBottomRight: L.point(30, 30)
-        }).setView([51.15, -2.9], 9);
+        var map = L.map('sw-map').setView([51.15, -2.9], 9);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
@@ -592,16 +588,24 @@ add_shortcode('dropoff_map', function() {
                 card.className = 'sw-card';
                 card.innerHTML = '<h4>' + loc.name + '</h4><p>' + loc.address + '</p>';
                 
+                // FIX: wait for the flyTo animation to finish before opening the popup,
+                // otherwise the popup's auto-pan interrupts the flight and the map ends up in the wrong place.
                 card.addEventListener('click', function() {
-                    document.querySelectorAll('.sw-card').forEach(c => c.classList.remove('active'));
+                    document.querySelectorAll('.sw-card').forEach(function(c) { c.classList.remove('active'); });
                     card.classList.add('active');
-                    
-                    var offsetLat = loc.lat + 0.0025;
-                    map.flyTo([offsetLat, loc.lng], 14, { duration: 0.8 });
-                    
-                    setTimeout(function() {
+
+                    map.stop();
+                    map.closePopup();
+
+                    var target = L.latLng(loc.lat, loc.lng);
+                    var alreadyThere = map.getZoom() === 14 && map.getCenter().distanceTo(target) < 5;
+
+                    if (alreadyThere) {
                         marker.openPopup();
-                    }, 250);
+                    } else {
+                        map.once('moveend', function() { marker.openPopup(); });
+                        map.flyTo(target, 14, { duration: 0.8 });
+                    }
                 });
 
                 listEl.appendChild(card);
@@ -622,7 +626,7 @@ add_shortcode('dropoff_map', function() {
             });
             renderList(filtered);
             if (filtered.length > 0) {
-                map.flyTo([filtered[0].lat + 0.0025, filtered[0].lng], 12);
+                map.flyTo([filtered[0].lat, filtered[0].lng], 12);
             }
         }
 
